@@ -14,7 +14,7 @@ import java.sql.SQLException;
  */
 public class DBUtil {
 
-    private static final String DB_PATH = "data/linkup.db";
+    private static final String DB_PATH = new File(System.getProperty("user.dir"), "data/linkup.db").getAbsolutePath();
     private static final String DB_URL = "jdbc:sqlite:" + DB_PATH;
 
     private static volatile HikariDataSource dataSource;
@@ -24,7 +24,7 @@ public class DBUtil {
      * 确保数据目录存在
      */
     private static void ensureDataDir() {
-        File dataDir = new File("data");
+        File dataDir = new File(System.getProperty("user.dir"), "data");
         if (!dataDir.exists()) {
             dataDir.mkdirs();
             System.out.println("[DBUtil] 创建数据目录: " + dataDir.getAbsolutePath());
@@ -44,13 +44,18 @@ public class DBUtil {
                         config.setJdbcUrl(DB_URL);
                         config.setDriverClassName("org.sqlite.JDBC");
 
-                        // SQLite 不需要用户名密码，连接池配置需调整
+                        // SQLite 连接池配置
                         config.setMaximumPoolSize(1);           // SQLite 单文件，仅需 1 个连接
                         config.setMinimumIdle(1);
-                        config.setConnectionTimeout(3000);
-                        config.setIdleTimeout(600000);
-                        config.setMaxLifetime(0);               // SQLite 连接无需回收
-                        config.setLeakDetectionThreshold(0);    // 关闭泄漏检测
+                        config.setConnectionTimeout(3000);      // 获取连接超时 3 秒
+                        config.setIdleTimeout(600000);          // 空闲连接超时 10 分钟
+                        config.setMaxLifetime(1800000);         // 连接最大存活时间 30 分钟
+
+                        // 每个新连接初始化时执行的 SQL：启用外键约束 + WAL 模式 + 忙等待超时
+                        // WAL 模式：写操作不阻塞读操作，大幅提升并发性能
+                        // foreign_keys：启用外键约束（SQLite 默认关闭）
+                        // busy_timeout：当数据库被锁时等待时间，避免立即报错
+                        config.setConnectionInitSql("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
 
                         dataSource = new HikariDataSource(config);
                         System.out.println("[DBUtil] SQLite 数据库连接池初始化成功: " + DB_PATH);
