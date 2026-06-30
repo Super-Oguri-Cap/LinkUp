@@ -42,6 +42,9 @@ public class LinkUpServer {
             System.out.println("[服务端] 正在初始化数据库...");
             org.example.util.DBInit.init();
 
+            // P0-4: 重置所有用户在线状态，避免上次运行时异常退出的用户仍标记为在线
+            resetAllUserOfflineStatus();
+
             serverSocket = new ServerSocket(PORT);
             running = true;
             System.out.println("============================================");
@@ -157,6 +160,25 @@ public class LinkUpServer {
      */
     public ExecutorService getExecutorService() {
         return executorService;
+    }
+
+    // ==================== 数据库操作 ====================
+
+    /**
+     * 重置所有用户离线状态
+     * 服务器启动时调用，清除上次运行时残留的在线状态
+     */
+    private void resetAllUserOfflineStatus() {
+        String sql = "UPDATE `user` SET online_status = 0 WHERE online_status = 1";
+        try (java.sql.Connection conn = DBUtil.getConnection();
+             java.sql.PreparedStatement ps = conn.prepareStatement(sql)) {
+            int updated = ps.executeUpdate();
+            if (updated > 0) {
+                System.out.println("[服务端] 已清除 " + updated + " 个残留在线状态");
+            }
+        } catch (java.sql.SQLException e) {
+            System.err.println("[服务端] 重置用户在线状态失败: " + e.getMessage());
+        }
     }
 
     // ==================== 入口 ====================

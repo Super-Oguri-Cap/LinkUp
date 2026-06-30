@@ -10,14 +10,25 @@ import java.util.List;
  */
 public class ChatSessionManager {
 
+    // ==================== 系统联系人常量 ====================
+    // 集中管理所有系统联系人名称，避免硬编码字符串散落各处
+    /** 群聊大厅标识 */
+    public static final String TARGET_GROUP_HALL = "群聊大厅";
+    /** AI 伴侣标识 */
+    public static final String TARGET_AI_COMPANION = "AI伴侣";
+    /** AI 小助手标识 */
+    public static final String TARGET_AI_ASSISTANT = "AI小助手";
+    /** 群聊广播时的接收方标识 */
+    public static final String TARGET_ALL = "所有人";
+
     /**
      * 聊天类型枚举
      */
     public enum ChatType {
-        GROUP("群聊大厅"),
+        GROUP(TARGET_GROUP_HALL),
         PRIVATE("私聊"),
-        AI("AI小助手"),
-        COMPANION("AI伴侣");
+        AI(TARGET_AI_ASSISTANT),
+        COMPANION(TARGET_AI_COMPANION);
 
         private final String displayName;
 
@@ -58,7 +69,7 @@ public class ChatSessionManager {
 
     public ChatSessionManager(String currentUser) {
         this.currentUser = currentUser;
-        this.currentTarget = "群聊大厅";
+        this.currentTarget = TARGET_GROUP_HALL;
         this.currentType = ChatType.GROUP;
     }
 
@@ -79,11 +90,11 @@ public class ChatSessionManager {
 
         this.currentTarget = target;
 
-        if ("AI伴侣".equals(target)) {
+        if (TARGET_AI_COMPANION.equals(target)) {
             this.currentType = ChatType.COMPANION;
-        } else if ("AI小助手".equals(target)) {
+        } else if (TARGET_AI_ASSISTANT.equals(target)) {
             this.currentType = ChatType.AI;
-        } else if ("群聊大厅".equals(target)) {
+        } else if (TARGET_GROUP_HALL.equals(target)) {
             this.currentType = ChatType.GROUP;
         } else {
             this.currentType = ChatType.PRIVATE;
@@ -138,7 +149,7 @@ public class ChatSessionManager {
             case AI:
                 return "当前用户: " + currentUser + "  |  AI 小助手 " + displayName;
             case GROUP:
-                return "当前用户: " + currentUser + "  |  群聊大厅";
+                return "当前用户: " + currentUser + "  |  " + TARGET_GROUP_HALL;
             default:
                 return "当前用户: " + currentUser + "  |  私聊: " + displayName;
         }

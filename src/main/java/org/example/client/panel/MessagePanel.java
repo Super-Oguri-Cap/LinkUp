@@ -49,7 +49,7 @@ public class MessagePanel extends JPanel {
     private final List<MessageMeta> messageMetaList = new ArrayList<>();
 
     /**
-     * 消息元数据 — 记录每条消息在文件中的原始行，用于删除定位
+     * 消息元数据 — 记录每条消息的发送者、内容、时间等，用于删除定位
      */
     public static class MessageMeta {
         public final String sender;
@@ -416,12 +416,12 @@ public class MessagePanel extends JPanel {
                 String cssClass;
                 String displayName;
 
-                if ("AI伴侣".equals(sender)) {
+                if (ChatSessionManager.TARGET_AI_COMPANION.equals(sender)) {
                     cssClass = "msg-companion";
-                    displayName = contactManager.getDisplayName("AI伴侣");
-                } else if ("AI小助手".equals(sender)) {
+                    displayName = contactManager.getDisplayName(ChatSessionManager.TARGET_AI_COMPANION);
+                } else if (ChatSessionManager.TARGET_AI_ASSISTANT.equals(sender)) {
                     cssClass = content.contains("【群聊摘要】") ? "msg-summary" : "msg-ai";
-                    displayName = contactManager.getDisplayName("AI小助手");
+                    displayName = contactManager.getDisplayName(ChatSessionManager.TARGET_AI_ASSISTANT);
                 } else if (sender.equals(currentUser)) {
                     cssClass = "msg-self";
                     displayName = "我";
@@ -496,11 +496,12 @@ public class MessagePanel extends JPanel {
     public void updateChatTargetCombo(java.util.List<String> friends) {
         String previousSelection = (String) chatTargetCombo.getSelectedItem();
         chatTargetCombo.removeAllItems();
-        chatTargetCombo.addItem("群聊大厅");
-        chatTargetCombo.addItem("AI伴侣");
-        chatTargetCombo.addItem("AI小助手");
+        chatTargetCombo.addItem(ChatSessionManager.TARGET_GROUP_HALL);
+        chatTargetCombo.addItem(ChatSessionManager.TARGET_AI_COMPANION);
+        chatTargetCombo.addItem(ChatSessionManager.TARGET_AI_ASSISTANT);
         for (String name : friends) {
-            if (!"AI伴侣".equals(name) && !"AI小助手".equals(name)) {
+            if (!ChatSessionManager.TARGET_AI_COMPANION.equals(name)
+                    && !ChatSessionManager.TARGET_AI_ASSISTANT.equals(name)) {
                 chatTargetCombo.addItem(name);
             }
         }
@@ -513,7 +514,7 @@ public class MessagePanel extends JPanel {
                 }
             }
         }
-        chatTargetCombo.setSelectedItem("群聊大厅");
+        chatTargetCombo.setSelectedItem(ChatSessionManager.TARGET_GROUP_HALL);
     }
 
     /**

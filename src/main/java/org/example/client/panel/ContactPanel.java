@@ -1,5 +1,6 @@
 package org.example.client.panel;
 
+import org.example.service.ChatSessionManager;
 import org.example.service.ContactManager;
 
 import javax.swing.*;
@@ -315,10 +316,10 @@ public class ContactPanel extends JPanel {
             String displayName = contactManager.getDisplayName(name);
 
             // AI 联系人显示特殊标识
-            if ("AI伴侣".equals(name)) {
+            if (ChatSessionManager.TARGET_AI_COMPANION.equals(name)) {
                 label.setText(displayName + "  · 有温度的陪伴者");
                 label.setForeground(isSelected ? Color.WHITE : new Color(230, 126, 34));
-            } else if ("AI小助手".equals(name)) {
+            } else if (ChatSessionManager.TARGET_AI_ASSISTANT.equals(name)) {
                 label.setText(displayName + "  · 智能助手");
                 label.setForeground(isSelected ? Color.WHITE : new Color(0, 120, 212));
             } else {

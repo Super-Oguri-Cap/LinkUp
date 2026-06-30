@@ -138,6 +138,9 @@ public class LoginFrame extends JFrame {
         // 设置当前用户名（登录成功前预绑定）
         client.setCurrentUser(username);
 
+        // 缓存密码供断线重连使用
+        client.cachePassword(password);
+
         // 构建登录消息并发送到服务端
         JsonObject loginMsg = MessageProtocol.buildMessage(
                 MessageProtocol.TYPE_LOGIN, username, "", password);

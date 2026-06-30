@@ -118,9 +118,15 @@ public class MessageProtocol {
 
     /**
      * 从 JSON 字符串解析为 JsonObject
+     * 解析失败时返回 null，不会抛出异常
      */
     public static JsonObject fromWire(String jsonStr) {
-        return gson.fromJson(jsonStr, JsonObject.class);
+        try {
+            return gson.fromJson(jsonStr, JsonObject.class);
+        } catch (Exception e) {
+            System.err.println("[MessageProtocol] 解析消息失败: " + e.getMessage());
+            return null;
+        }
     }
 
     /**

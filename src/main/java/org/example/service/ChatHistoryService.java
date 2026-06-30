@@ -1,27 +1,48 @@
 package org.example.service;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
-import java.text.SimpleDateFormat;
+import org.example.util.DBUtil;
+
+import java.sql.*;
 import java.util.*;
 
 /**
- * 聊天记录持久化服务
- * 负责聊天记录文件的路径计算、读取、写入和格式转换
- * 不依赖任何 Swing 组件，可独立进行单元测试
+ * 聊天记录持久化服务（统一数据库存储版）
+ * 负责聊天记录的读取、写入和删除，所有数据统一存入 SQLite chat_message 表
+ *
+ * 改进说明：
+ * 原实现使用 chat_history/ 目录的文件系统存储，与数据库存储并行，
+ * 存在数据一致性风险（文件删除但数据库未删除，或反之）。
+ * 现统一为数据库存储，消除双写不一致问题。
+ *
+ * 兼容性：保留文件构造函数用于测试隔离，但实际不再写文件
  */
 public class ChatHistoryService {
 
-    /** 聊天记录文件存放目录（项目根目录下的 chat_history） */
-    private static final Path CHAT_HISTORY_DIR = Paths.get(
-            System.getProperty("user.dir"), "chat_history");
+    /** 聊天类型常量：与数据库 chat_message.chat_type 对应 */
+    private static final int CHAT_TYPE_PRIVATE = 0;
+    private static final int CHAT_TYPE_GROUP = 1;
 
-    /** 文件内时间戳格式 */
-    private static final SimpleDateFormat FILE_SDF = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    /** 消息类型常量 */
+    private static final int MSG_TYPE_TEXT = 0;
 
     /**
-     * 追加一条消息到对应的聊天记录文件
+     * 默认构造函数
+     */
+    public ChatHistoryService() {
+    }
+
+    /**
+     * 指定存储目录的构造函数（保留兼容性，用于测试隔离）
+     *
+     * @param baseDir 基础目录（当前版本不使用文件存储，仅保留接口兼容）
+     */
+    public ChatHistoryService(java.nio.file.Path baseDir) {
+        // 兼容旧接口，不再使用文件存储
+    }
+
+    /**
+     * 追加一条消息到数据库
+     * 统一存储入口：私聊和群聊都写入 chat_message 表
      *
      * @param chatType    聊天类型：GROUP, PRIVATE, AI, COMPANION
      * @param currentUser 当前用户名
@@ -32,23 +53,29 @@ public class ChatHistoryService {
      */
     public void appendMessage(String chatType, String currentUser, String target,
                               String sender, String content, String timeStr) {
+        long timestamp;
         try {
-            Files.createDirectories(CHAT_HISTORY_DIR);
-            Path file = getHistoryFile(chatType, currentUser, target);
+            timestamp = Long.parseLong(timeStr);
+        } catch (NumberFormatException e) {
+            // 非数字时间戳，使用当前时间
+            timestamp = System.currentTimeMillis();
+        }
 
-            String readableTime = formatTime(timeStr);
-            String safeContent = escapeContent(content);
-            String line = readableTime + "\t" + sender + "\t" + safeContent + "\n";
-
-            Files.write(file, line.getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (IOException e) {
-            System.err.println("[ChatHistoryService] 写入聊天记录失败: " + e.getMessage());
+        int dbChatType = "GROUP".equals(chatType) ? CHAT_TYPE_GROUP : CHAT_TYPE_PRIVATE;
+        if (dbChatType == CHAT_TYPE_GROUP) {
+            // 群聊消息：receiver_id = 0（群聊不针对特定接收者），仅通过 sender 查找用户
+            saveGroupMessageToDB(sender, content, timestamp);
+        } else {
+            // 私聊/AI聊天：receiver 为对话另一方
+            // 当 sender == target 时（如 AI 回复，target 始终为 AI 名），receiver 应为 currentUser
+            String receiver = sender.equals(target) ? currentUser : target;
+            saveMessageToDB(sender, receiver, dbChatType, MSG_TYPE_TEXT, content, timestamp);
         }
     }
 
     /**
      * 加载最近 N 条聊天记录
+     * 从数据库查询，替代原文件读取
      *
      * @param chatType    聊天类型
      * @param currentUser 当前用户名
@@ -59,34 +86,100 @@ public class ChatHistoryService {
     public List<String[]> loadRecentMessages(String chatType, String currentUser,
                                               String target, int limit) {
         List<String[]> result = new ArrayList<>();
-        try {
-            Path file = getHistoryFile(chatType, currentUser, target);
-            if (!Files.exists(file)) {
-                return result;
-            }
 
-            List<String> allLines = Files.readAllLines(file, StandardCharsets.UTF_8);
-            int start = Math.max(0, allLines.size() - limit);
-            for (int i = start; i < allLines.size(); i++) {
-                String line = allLines.get(i).trim();
-                if (line.isEmpty()) {
-                    continue;
+        if ("GROUP".equals(chatType)) {
+            // 群聊：查 chat_type=1 的消息
+            String sql = "SELECT u.username AS sender_name, cm.content, cm.sent_at "
+                    + "FROM chat_message cm "
+                    + "JOIN `user` u ON cm.sender_id = u.id "
+                    + "WHERE cm.chat_type = ? "
+                    + "ORDER BY cm.sent_at DESC LIMIT ?";
+            try (Connection conn = DBUtil.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, CHAT_TYPE_GROUP);
+                ps.setInt(2, limit);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String time = rs.getString("sent_at");
+                        String sender = rs.getString("sender_name");
+                        String msgContent = rs.getString("content");
+                        result.add(new String[]{time, sender, msgContent});
+                    }
                 }
-                String[] parts = line.split("\t", 3);
-                if (parts.length == 3) {
-                    parts[2] = unescapeContent(parts[2]);
-                    result.add(parts);  // [时间, 发送者, 内容]
-                }
+            } catch (SQLException e) {
+                System.err.println("[ChatHistoryService] 读取群聊记录失败: " + e.getMessage());
             }
-        } catch (IOException e) {
-            System.err.println("[ChatHistoryService] 读取聊天记录失败: " + e.getMessage());
+        } else if ("COMPANION".equals(chatType) || "AI".equals(chatType)) {
+            // AI 聊天：查与 AI 的消息（sender 或 receiver 为 AI 标识）
+            String aiTarget = "COMPANION".equals(chatType) ? "AI伴侣" : "AI小助手";
+            String sql = "SELECT sender_name, content, sent_at FROM ("
+                    + "SELECT u1.username AS sender_name, cm.content, cm.sent_at "
+                    + "FROM chat_message cm "
+                    + "JOIN `user` u1 ON cm.sender_id = u1.id "
+                    + "JOIN `user` u2 ON cm.receiver_id = u2.id "
+                    + "WHERE cm.chat_type = ? AND ("
+                    + "(u1.username = ? AND u2.username = ?) OR (u1.username = ? AND u2.username = ?)) "
+                    + "ORDER BY cm.sent_at DESC LIMIT ?"
+                    + ") AS recent ORDER BY sent_at ASC";
+            try (Connection conn = DBUtil.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, CHAT_TYPE_PRIVATE);
+                ps.setString(2, currentUser);
+                ps.setString(3, aiTarget);
+                ps.setString(4, aiTarget);
+                ps.setString(5, currentUser);
+                ps.setInt(6, limit);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        result.add(new String[]{
+                                rs.getString("sent_at"),
+                                rs.getString("sender_name"),
+                                rs.getString("content")
+                        });
+                    }
+                }
+            } catch (SQLException e) {
+                System.err.println("[ChatHistoryService] 读取AI聊天记录失败: " + e.getMessage());
+            }
+        } else {
+            // 私聊：查两个用户之间的消息
+            String sql = "SELECT sender_name, content, sent_at FROM ("
+                    + "SELECT u1.username AS sender_name, cm.content, cm.sent_at "
+                    + "FROM chat_message cm "
+                    + "JOIN `user` u1 ON cm.sender_id = u1.id "
+                    + "JOIN `user` u2 ON cm.receiver_id = u2.id "
+                    + "WHERE cm.chat_type = ? AND ("
+                    + "(u1.username = ? AND u2.username = ?) OR (u1.username = ? AND u2.username = ?)) "
+                    + "ORDER BY cm.sent_at DESC LIMIT ?"
+                    + ") AS recent ORDER BY sent_at ASC";
+            try (Connection conn = DBUtil.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, CHAT_TYPE_PRIVATE);
+                ps.setString(2, currentUser);
+                ps.setString(3, target);
+                ps.setString(4, target);
+                ps.setString(5, currentUser);
+                ps.setInt(6, limit);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        result.add(new String[]{
+                                rs.getString("sent_at"),
+                                rs.getString("sender_name"),
+                                rs.getString("content")
+                        });
+                    }
+                }
+            } catch (SQLException e) {
+                System.err.println("[ChatHistoryService] 读取私聊记录失败: " + e.getMessage());
+            }
         }
+
         return result;
     }
 
     /**
      * 删除指定的一条聊天记录
-     * 根据时间戳 + 发送者 + 内容匹配，删除文件中的对应行
+     * 从数据库删除，替代原文件删除
      *
      * @param chatType    聊天类型
      * @param currentUser 当前用户名
@@ -98,81 +191,70 @@ public class ChatHistoryService {
      */
     public boolean deleteMessage(String chatType, String currentUser, String target,
                                   String sender, String content, String timeStr) {
-        try {
-            Path file = getHistoryFile(chatType, currentUser, target);
-            if (!Files.exists(file)) {
-                return false;
+        int dbChatType = "GROUP".equals(chatType) ? CHAT_TYPE_GROUP : CHAT_TYPE_PRIVATE;
+
+        // 按 sender + content + chat_type 匹配删除
+        // 不依赖时间戳匹配（timeStr 可能是格式化时间或毫秒时间戳，无法统一解析）
+        String sql = "DELETE FROM chat_message "
+                + "WHERE sender_id = (SELECT id FROM `user` WHERE username = ?) "
+                + "AND content = ? AND chat_type = ?";
+        try (Connection conn = DBUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, sender);
+            ps.setString(2, content);
+            ps.setInt(3, dbChatType);
+            int rows = ps.executeUpdate();
+            if (rows > 0) {
+                System.out.println("[ChatHistoryService] 已删除 " + rows + " 条消息记录");
             }
-
-            List<String> allLines = Files.readAllLines(file, StandardCharsets.UTF_8);
-            String readableTime = formatTime(timeStr);
-            String safeContent = escapeContent(content);
-            String targetLine = readableTime + "\t" + sender + "\t" + safeContent;
-
-            // 找到匹配的行并删除
-            boolean removed = allLines.removeIf(line -> line.trim().equals(targetLine));
-
-            if (removed) {
-                // 重写文件
-                Files.write(file, allLines, StandardCharsets.UTF_8);
-                System.out.println("[ChatHistoryService] 已删除消息: " + targetLine);
-            }
-            return removed;
-        } catch (IOException e) {
+            return rows > 0;
+        } catch (SQLException e) {
             System.err.println("[ChatHistoryService] 删除消息失败: " + e.getMessage());
             return false;
         }
     }
 
-    /**
-     * 根据聊天类型和对象获取对应的聊天记录文件路径
-     * 私聊：两个用户名按字典序排列，保证同一对话文件名一致
-     * 群聊/AI：直接用类型标识
-     */
-    private Path getHistoryFile(String chatType, String currentUser, String target) {
-        String filename;
-        switch (chatType) {
-            case "GROUP":
-                filename = "group_chat.txt";
-                break;
-            case "COMPANION":
-                filename = "ai_companion.txt";
-                break;
-            case "AI":
-                filename = "ai_assistant.txt";
-                break;
-            default: // PRIVATE
-                String[] users = {currentUser, target};
-                Arrays.sort(users);
-                filename = users[0] + "_" + users[1] + ".txt";
-                break;
-        }
-        return CHAT_HISTORY_DIR.resolve(filename);
-    }
+    // ==================== 内部方法 ====================
 
     /**
-     * 将时间戳字符串转为可读格式
+     * 存储群聊消息到数据库（receiver_id = 0，与 HandlerContext.saveGroupMessage 保持一致）
      */
-    private String formatTime(String timeStr) {
-        try {
-            long ts = Long.parseLong(timeStr);
-            return FILE_SDF.format(new Date(ts));
-        } catch (NumberFormatException e) {
-            return timeStr;
+    private void saveGroupMessageToDB(String sender, String content, long timestamp) {
+        String sql = "INSERT INTO chat_message (sender_id, receiver_id, chat_type, message_type, content, sent_at) "
+                + "SELECT u.id, 0, ?, ?, ?, datetime(? / 1000, 'unixepoch') "
+                + "FROM `user` u WHERE u.username = ?";
+        try (Connection conn = DBUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, CHAT_TYPE_GROUP);
+            ps.setInt(2, MSG_TYPE_TEXT);
+            ps.setString(3, content);
+            ps.setLong(4, timestamp);
+            ps.setString(5, sender);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("[ChatHistoryService] 群聊消息存储失败: " + e.getMessage());
         }
     }
 
     /**
-     * 转义内容中的特殊字符，保证每行一条记录
+     * 存储消息到数据库
      */
-    private String escapeContent(String content) {
-        return content.replace("\n", "\\n").replace("\t", "\\t");
-    }
-
-    /**
-     * 还原转义过的内容
-     */
-    private String unescapeContent(String content) {
-        return content.replace("\\n", "\n").replace("\\t", "\t");
+    private void saveMessageToDB(String sender, String receiver, int chatType,
+                                  int messageType, String content, long timestamp) {
+        String sql = "INSERT INTO chat_message (sender_id, receiver_id, chat_type, message_type, content, sent_at) "
+                + "SELECT u1.id, u2.id, ?, ?, ?, datetime(? / 1000, 'unixepoch') "
+                + "FROM `user` u1, `user` u2 WHERE u1.username = ? AND u2.username = ?";
+        try (Connection conn = DBUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, chatType);
+            ps.setInt(2, messageType);
+            ps.setString(3, content);
+            ps.setLong(4, timestamp);
+            ps.setString(5, sender);
+            ps.setString(6, receiver);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("[ChatHistoryService] 消息存储失败: " + e.getMessage());
+        }
     }
 }

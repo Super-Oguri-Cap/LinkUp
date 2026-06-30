@@ -251,7 +251,7 @@ public class MainFrame extends JFrame
         titleBar.setBackground(new Color(0, 120, 212));
         titleBar.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
 
-        titleLabel = new JLabel("当前用户: " + currentUser + "  |  群聊大厅");
+        titleLabel = new JLabel("当前用户: " + currentUser + "  |  " + ChatSessionManager.TARGET_GROUP_HALL);
         titleLabel.setFont(new Font("微软雅黑", Font.BOLD, 16));
         titleLabel.setForeground(Color.WHITE);
         titleBar.add(titleLabel, BorderLayout.WEST);
@@ -376,14 +376,14 @@ public class MainFrame extends JFrame
      * 打开 AI 伴侣聊天
      */
     private void openAICompanion() {
-        String displayName = contactManager.getDisplayName("AI伴侣");
-        sessionManager.setSession("AI伴侣", ChatSessionManager.ChatType.COMPANION);
+        String displayName = contactManager.getDisplayName(ChatSessionManager.TARGET_AI_COMPANION);
+        sessionManager.setSession(ChatSessionManager.TARGET_AI_COMPANION, ChatSessionManager.ChatType.COMPANION);
         titleLabel.setText(sessionManager.getTitleText(displayName));
 
         messagePanel.initHTMLDocument();
         tabbedPane.setSelectedIndex(0);
 
-        appendMessage("AI伴侣", "你好，我是" + displayName + "。无论你想聊天、倾诉，还是单纯想找人说说话，我都陪着你。",
+        appendMessage(ChatSessionManager.TARGET_AI_COMPANION, "你好，我是" + displayName + "。无论你想聊天、倾诉，还是单纯想找人说说话，我都陪着你。",
                     String.valueOf(System.currentTimeMillis()), "");
     }
 
@@ -396,7 +396,7 @@ public class MainFrame extends JFrame
         client.sendMessage(MessageProtocol.toWire(msg));
         tabbedPane.setSelectedIndex(0);
 
-        appendMessage("AI小助手", "正在生成群聊摘要，请稍候...",
+        appendMessage(ChatSessionManager.TARGET_AI_ASSISTANT, "正在生成群聊摘要，请稍候...",
                 String.valueOf(System.currentTimeMillis()), "");
     }
 
@@ -408,7 +408,7 @@ public class MainFrame extends JFrame
         polishContent.addProperty("text", text);
         polishContent.addProperty("style", style);
         JsonObject polishMsg = MessageProtocol.buildMessage(
-                MessageProtocol.TYPE_POLISH, currentUser, "AI小助手",
+                MessageProtocol.TYPE_POLISH, currentUser, ChatSessionManager.TARGET_AI_ASSISTANT,
                 polishContent.toString());
         client.sendMessage(MessageProtocol.toWire(polishMsg));
 
@@ -429,7 +429,7 @@ public class MainFrame extends JFrame
         polishContent.addProperty("text", text);
         polishContent.addProperty("style", style);
         JsonObject polishMsg = MessageProtocol.buildMessage(
-                MessageProtocol.TYPE_POLISH, currentUser, "AI小助手",
+                MessageProtocol.TYPE_POLISH, currentUser, ChatSessionManager.TARGET_AI_ASSISTANT,
                 polishContent.toString());
         client.sendMessage(MessageProtocol.toWire(polishMsg));
 
@@ -521,8 +521,8 @@ public class MainFrame extends JFrame
 
     /**
      * 删除指定索引的消息
-     * 1. 从本地文件中删除记录（ChatHistoryService）
-     * 2. 向服务端发请求，同步删除 MySQL chat_message 表中的记录
+     * 1. 从本地 SQLite chat_message 表删除记录（ChatHistoryService）
+     * 2. 向服务端发送删除请求，同步删除服务端 chat_message 表中的记录
      */
     private void deleteMessageFromHistory(int messageIndex) {
         java.util.List<MessagePanel.MessageMeta> metaList = messagePanel.getMessageMetaList();
@@ -530,7 +530,7 @@ public class MainFrame extends JFrame
 
         MessagePanel.MessageMeta meta = metaList.get(messageIndex);
 
-        // 1. 删除本地文件记录
+        // 1. 删除本地数据库记录
         chatHistoryService.deleteMessage(
                 meta.chatType, meta.currentUser, meta.target,
                 meta.sender, meta.content, meta.timeStr);
@@ -541,6 +541,7 @@ public class MainFrame extends JFrame
         deleteData.addProperty("content", meta.content);
         deleteData.addProperty("time", meta.timeStr);
         deleteData.addProperty("chatType", meta.chatType);
+        deleteData.addProperty("msgId", meta.msgId != null ? meta.msgId : "");
 
         JsonObject deleteMsg = MessageProtocol.buildMessage(
                 MessageProtocol.TYPE_DELETE_MESSAGE, currentUser, "", deleteData.toString());
@@ -548,7 +549,7 @@ public class MainFrame extends JFrame
     }
 
     /**
-     * 从本地文件加载最近 50 条聊天记录
+     * 从本地 SQLite 数据库加载最近 50 条聊天记录
      */
     private void loadChatHistory() {
         SwingUtilities.invokeLater(() -> {
@@ -662,8 +663,8 @@ public class MainFrame extends JFrame
                 messagePanel.updateMessageStatus(msgId, "delivered");
             }
             // 切回主会话
-            sessionManager.switchToChat("所有人");
-            messagePanel.syncComboSelection("所有人");
+            sessionManager.switchToChat(ChatSessionManager.TARGET_ALL);
+            messagePanel.syncComboSelection(ChatSessionManager.TARGET_ALL);
             JOptionPane.showMessageDialog(this,
                     "您离线期间收到 " + unreadArray.size() + " 条未读消息，已显示在对应聊天中",
                     "离线消息", JOptionPane.INFORMATION_MESSAGE);
@@ -718,7 +719,7 @@ public class MainFrame extends JFrame
             sessionManager.switchToChat(target);
             messagePanel.syncComboSelection(target);
             messagePanel.initHTMLDocument();
-            messagePanel.appendMessage("AI小助手", "【聊天摘要】" + summary,
+            messagePanel.appendMessage(ChatSessionManager.TARGET_AI_ASSISTANT, "【聊天摘要】" + summary,
                     String.valueOf(System.currentTimeMillis()), currentUser, "");
         }));
 
@@ -748,7 +749,7 @@ public class MainFrame extends JFrame
                 MessageProtocol.TYPE_RECALL, currentUser, meta.target, recallData.toString());
         client.sendMessage(MessageProtocol.toWire(recallMsg));
 
-        // 删除本地文件中的消息
+        // 删除本地数据库中的消息
         chatHistoryService.deleteMessage(
                 meta.chatType, meta.currentUser, meta.target,
                 meta.sender, meta.content, meta.timeStr);
@@ -866,12 +867,13 @@ public class MainFrame extends JFrame
      */
     private void requestAISummary() {
         String target = sessionManager.getCurrentTarget();
-        if ("所有人".equals(target)) {
+        if (ChatSessionManager.TARGET_ALL.equals(target)) {
             // 群聊摘要
             generateGroupSummary();
             return;
         }
-        if ("AI伴侣".equals(target) || "AI小助手".equals(target)) {
+        if (ChatSessionManager.TARGET_AI_COMPANION.equals(target)
+                || ChatSessionManager.TARGET_AI_ASSISTANT.equals(target)) {
             JOptionPane.showMessageDialog(this, "AI 聊天无需摘要", "提示", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
@@ -904,11 +906,12 @@ public class MainFrame extends JFrame
             String base64 = java.util.Base64.getEncoder().encodeToString(imageBytes);
 
             String target = sessionManager.getCurrentTarget();
-            if ("所有人".equals(target)) {
+            if (ChatSessionManager.TARGET_ALL.equals(target)) {
                 JOptionPane.showMessageDialog(this, "群聊暂不支持图片发送", "提示", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
-            if ("AI伴侣".equals(target) || "AI小助手".equals(target)) {
+            if (ChatSessionManager.TARGET_AI_COMPANION.equals(target)
+                    || ChatSessionManager.TARGET_AI_ASSISTANT.equals(target)) {
                 JOptionPane.showMessageDialog(this, "AI 聊天暂不支持图片", "提示", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }

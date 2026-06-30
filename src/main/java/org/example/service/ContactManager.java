@@ -21,8 +21,11 @@ public class ContactManager {
     /** 好友数量上限 */
     private static final int MAX_FRIENDS = 150;
 
-    /** 系统内置联系人（不可删除） */
-    private static final String[] SYSTEM_CONTACTS = {"AI伴侣", "AI小助手"};
+    /** 系统内置联系人（不可删除），引用 ChatSessionManager 中的常量 */
+    private static final String[] SYSTEM_CONTACTS = {
+            ChatSessionManager.TARGET_AI_COMPANION,
+            ChatSessionManager.TARGET_AI_ASSISTANT
+    };
 
     /** 当前登录用户名 */
     private final String currentUser;
@@ -116,21 +119,39 @@ public class ContactManager {
     }
 
     /**
-     * 根据服务端返回的用户列表更新好友列表（仅在线用户）
+     * 根据服务端返回的用户列表更新好友列表
+     * 仅更新在线状态，保留离线好友不被移除
      */
     public void updateFromServer(JsonArray userList) {
-        friends.clear();
-        // 先添加系统联系人
+        // 保留系统联系人和已有的离线好友，只更新在线状态
+        Set<String> systemContactsSet = new LinkedHashSet<>();
         for (String contact : SYSTEM_CONTACTS) {
-            friends.add(contact);
+            systemContactsSet.add(contact);
         }
-        // 添加在线用户
+
+        // 收集当前离线好友（排除系统联系人和自己）
+        Set<String> offlineFriends = new LinkedHashSet<>();
+        for (String friend : friends) {
+            if (!systemContactsSet.contains(friend) && !friend.equals(currentUser)) {
+                offlineFriends.add(friend);
+            }
+        }
+
+        friends.clear();
+        friends.addAll(systemContactsSet);
+
+        // 添加离线好友（保留）
+        friends.addAll(offlineFriends);
+
+        // 添加当前在线用户（排除自己）
+        Set<String> onlineUsers = new LinkedHashSet<>();
         for (int i = 0; i < userList.size(); i++) {
             String username = userList.get(i).getAsString();
             if (!username.equals(currentUser)) {
-                friends.add(username);
+                onlineUsers.add(username);
             }
         }
+        friends.addAll(onlineUsers);
         notifyListener();
     }
 

@@ -45,8 +45,11 @@ public class DBUtil {
                         config.setDriverClassName("org.sqlite.JDBC");
 
                         // SQLite 连接池配置
-                        config.setMaximumPoolSize(1);           // SQLite 单文件，仅需 1 个连接
-                        config.setMinimumIdle(1);
+                        // 注意：SQLite 单文件写入会加锁，maxPoolSize 增大会增加并发写入冲突概率
+                        // 但 maxPoolSize=1 时，单个长查询（如 AI 摘要加载大量历史消息）会阻塞所有写操作
+                        // 因此设为 5，允许少量并发操作，同时保持 SQLite 写入稳定性
+                        config.setMaximumPoolSize(5);
+                        config.setMinimumIdle(2);
                         config.setConnectionTimeout(3000);      // 获取连接超时 3 秒
                         config.setIdleTimeout(600000);          // 空闲连接超时 10 分钟
                         config.setMaxLifetime(1800000);         // 连接最大存活时间 30 分钟
@@ -85,6 +88,7 @@ public class DBUtil {
     public static void shutdown() {
         if (dataSource != null && !dataSource.isClosed()) {
             dataSource.close();
+            dataSource = null;
             System.out.println("[DBUtil] 数据库连接池已关闭");
         }
     }

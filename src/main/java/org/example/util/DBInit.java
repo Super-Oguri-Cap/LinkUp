@@ -20,6 +20,11 @@ public class DBInit {
 
     public static void init() {
         try (Connection conn = DBUtil.getConnection()) {
+            // 强制启用 WAL 模式（持久化到数据库文件）
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("PRAGMA journal_mode = WAL");
+                stmt.execute("PRAGMA busy_timeout = 5000");
+            }
             ensureSchemaTable(conn);
             List<String> pendingScripts = findPendingScripts(conn);
             for (String script : pendingScripts) {
@@ -80,13 +85,32 @@ public class DBInit {
                 if (line.trim().isEmpty() || line.trim().startsWith("--")) {
                     continue;
                 }
-                sqlBuilder.append(line);
+                sqlBuilder.append(line).append(" ");
                 if (line.trim().endsWith(";")) {
                     String sql = sqlBuilder.toString().trim();
-                    try (Statement stmt = conn.createStatement()) {
-                        stmt.execute(sql);
+                    // 去掉末尾的分号
+                    if (sql.endsWith(";")) {
+                        sql = sql.substring(0, sql.length() - 1).trim();
+                    }
+                    if (!sql.isEmpty()) {
+                        try (Statement stmt = conn.createStatement()) {
+                            stmt.execute(sql);
+                        }
                     }
                     sqlBuilder = new StringBuilder();
+                }
+            }
+            // 处理文件末尾没有尾部冒号的最后一条语句
+            String remaining = sqlBuilder.toString().trim();
+            if (!remaining.isEmpty()) {
+                // 去掉末尾可能存在的分号
+                if (remaining.endsWith(";")) {
+                    remaining = remaining.substring(0, remaining.length() - 1).trim();
+                }
+                if (!remaining.isEmpty()) {
+                    try (Statement stmt = conn.createStatement()) {
+                        stmt.execute(remaining);
+                    }
                 }
             }
         } catch (java.io.IOException e) {

@@ -64,6 +64,11 @@ public class AISettings {
             "回复格式要求：\n" +
             "【群聊摘要】\n...\n\n【与我相关】\n...";
 
+    /** 私聊摘要 System Prompt */
+    private String chatSummaryPrompt =
+            "你是一个私聊摘要助手。请根据以下与「%s」的对话记录，用 2-3 句话概括本次对话的核心主题和关键信息。" +
+            "回复格式：【摘要】...（不超过100字）";
+
     /** 对话润色 System Prompt */
     private String polishPrompt =
             "你是一个文字润色助手。请将用户输入的消息改写成「%s」的风格，" +
@@ -191,6 +196,9 @@ public class AISettings {
 
     public String getSummaryPrompt() { return summaryPrompt; }
     public void setSummaryPrompt(String summaryPrompt) { this.summaryPrompt = summaryPrompt; }
+
+    public String getChatSummaryPrompt() { return chatSummaryPrompt; }
+    public void setChatSummaryPrompt(String chatSummaryPrompt) { this.chatSummaryPrompt = chatSummaryPrompt; }
 
     public String getPolishPrompt() { return polishPrompt; }
     public void setPolishPrompt(String polishPrompt) { this.polishPrompt = polishPrompt; }

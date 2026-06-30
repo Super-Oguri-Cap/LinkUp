@@ -90,6 +90,26 @@ public class AIAssistant {
     // ==================== 场景 C：对话润色 ====================
 
     /**
+     * 私聊对话摘要（同步阻塞，请在独立线程中调用）
+     * 与群聊摘要不同，私聊摘要侧重于理解对话主题和关键信息
+     *
+     * @param chatMessages 私聊消息列表，每行一条 "用户名: 消息内容"
+     * @param targetUser   私聊对象用户名
+     * @param currentUser  当前用户名
+     * @return 摘要结果
+     */
+    public static String summarizeChat(String chatMessages, String targetUser, String currentUser) throws IOException {
+        AISettings settings = getSettings();
+        if (!settings.isConfigured()) {
+            return "【模拟摘要】与 " + targetUser + " 的对话摘要（请配置 AI 服务以启用真实摘要）";
+        }
+        String systemPrompt = String.format(settings.getChatSummaryPrompt(), targetUser);
+        return callAPI(settings, systemPrompt, chatMessages);
+    }
+
+    // ==================== 场景 C：对话润色 ====================
+
+    /**
      * 对话润色（同步阻塞，请在独立线程中调用）
      *
      * @param originalText 原始消息文本
@@ -114,9 +134,17 @@ public class AIAssistant {
         // 自动补全 API URL：如果用户只填了 base URL（如 http://localhost:1234），
         // 自动追加 /v1/chat/completions，避免 LM Studio / Ollama 等本地模型报 "POST /" 错误
         String apiUrl = settings.getApiUrl();
+        // 去掉末尾可能存在的斜杠
+        apiUrl = apiUrl.replaceAll("/+$", "");
+        // 已包含完整路径，无需补全
         if (!apiUrl.endsWith("/v1/chat/completions") && !apiUrl.contains("/chat/completions")) {
-            // 去掉末尾可能存在的斜杠，再拼接标准路径
-            apiUrl = apiUrl.replaceAll("/+$", "") + "/v1/chat/completions";
+            if (apiUrl.endsWith("/v1")) {
+                // e.g., http://localhost:1234/v1 → http://localhost:1234/v1/chat/completions
+                apiUrl = apiUrl + "/chat/completions";
+            } else {
+                // e.g., http://localhost:1234 → http://localhost:1234/v1/chat/completions
+                apiUrl = apiUrl + "/v1/chat/completions";
+            }
             System.out.println("[AI] URL 自动补全: " + settings.getApiUrl() + " -> " + apiUrl);
         }
 

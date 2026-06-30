@@ -46,8 +46,8 @@ public class LinkUpClient {
     private final AtomicInteger missedHeartbeats = new AtomicInteger(0);
 
     private String currentUser;
-
-    // UI 引用
+    /** 缓存登录密码，用于断线重连时自动重新登录 */
+    private String cachedPassword;
     private LoginFrame loginFrame;
 
     // ==================== 回调函数 ====================
@@ -149,7 +149,7 @@ public class LinkUpClient {
         });
 
         heartbeatExecutor.scheduleWithFixedDelay(() -> {
-            if (!connected.get() || intentionalDisconnect.get()) {
+            if (!connected.get() || intentionalDisconnect.get() || currentUser == null) {
                 return;
             }
             // 上一轮 PING 没有得到 PONG，累加丢失计数
@@ -160,14 +160,13 @@ public class LinkUpClient {
                 onConnectionLost();
                 return;
             }
-            // 发送 PING
+            // 发送 PING（通过 sendMessage 确保线程安全）
             try {
                 JsonObject ping = new JsonObject();
                 ping.addProperty("type", MessageProtocol.TYPE_PING);
-                ping.addProperty("sender", currentUser != null ? currentUser : "");
-                writer.write(MessageProtocol.toWire(ping));
-                writer.flush();
-            } catch (IOException e) {
+                ping.addProperty("sender", currentUser);
+                sendMessage(MessageProtocol.toWire(ping));
+            } catch (Exception e) {
                 System.err.println("[心跳] PING 发送失败: " + e.getMessage());
                 onConnectionLost();
             }
@@ -219,10 +218,10 @@ public class LinkUpClient {
 
                 if (connect()) {
                     System.out.println("[重连] 重连成功！");
-                    // 重连成功后重新登录
-                    if (currentUser != null) {
+                    // 重连成功后使用缓存密码重新登录
+                    if (currentUser != null && cachedPassword != null) {
                         JsonObject reLogin = MessageProtocol.buildMessage(
-                                MessageProtocol.TYPE_LOGIN, currentUser, "", currentUser);
+                                MessageProtocol.TYPE_LOGIN, currentUser, "", cachedPassword);
                         sendMessage(MessageProtocol.toWire(reLogin));
                     }
                     SwingUtilities.invokeLater(() ->
@@ -443,8 +442,8 @@ public class LinkUpClient {
             String msgId = msg.has("msgId") ? msg.get("msgId").getAsString() : "";
             messageCallback.accept(sender, content, time, msgId);
 
-            // 收到消息后，发送已读回执
-            if (!msgId.isEmpty() && currentUser != null) {
+            // 收到他人消息后，发送已读回执（自己发的消息不需要）
+            if (!msgId.isEmpty() && currentUser != null && !sender.equals(currentUser)) {
                 JsonObject readAck = MessageProtocol.buildMessageWithId(
                         MessageProtocol.TYPE_MSG_READ, currentUser,
                         msg.get("sender").getAsString(), msgId, msgId);
@@ -462,9 +461,9 @@ public class LinkUpClient {
     // ==================== 发送消息 ====================
 
     /**
-     * 发送消息到服务端（带异常处理和断线检测）
+     * 发送消息到服务端（线程安全，防止心跳线程与主线程并发写入 BufferedWriter）
      */
-    public void sendMessage(String message) {
+    public synchronized void sendMessage(String message) {
         if (!connected.get() || writer == null) {
             System.err.println("[客户端] 未连接到服务器，无法发送消息");
             return;
@@ -511,7 +510,16 @@ public class LinkUpClient {
 
     public void showLogin() {
         if (!connect()) {
-            System.exit(1);
+            // 连接失败时显示错误对话框而非直接退出，让用户可以重试
+            SwingUtilities.invokeLater(() -> {
+                int choice = JOptionPane.showConfirmDialog(null,
+                        "无法连接到服务器。是否重试？",
+                        "连接失败", JOptionPane.YES_NO_OPTION, JOptionPane.ERROR_MESSAGE);
+                if (choice == JOptionPane.YES_OPTION) {
+                    showLogin();
+                }
+            });
+            return;
         }
         loginFrame = new LoginFrame(this);
         loginFrame.setVisible(true);
@@ -526,6 +534,14 @@ public class LinkUpClient {
 
     public void setCurrentUser(String currentUser) {
         this.currentUser = currentUser;
+    }
+
+    /**
+     * 缓存用户密码，供断线重连时自动重新登录使用
+     * 登录成功后由 LoginFrame 调用
+     */
+    public void cachePassword(String password) {
+        this.cachedPassword = password;
     }
 
     public boolean isConnected() {
