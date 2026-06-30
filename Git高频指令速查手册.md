@@ -23,6 +23,8 @@ git commit -m "feat: 完成了用户登录模块"
 git push -u origin SQLite   # 首次推送（关联远程分支）
 git push origin SQLite      # 后续推送
 ```
+git log --oneline origin/SQLite..HEAD   # 查看本地有但远程没有的
+git log --oneline HEAD..origin/SQLite   # 查看远程有但本地没有的
 
 ### 标准提交流程（三板斧）
 
