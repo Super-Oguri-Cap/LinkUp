@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch4jConfig>
+  <dontWrapJar>false</dontWrapJar>
+  <headerType>gui</headerType>
+  <jar>target\LinkUp-1.0-SNAPSHOT.jar</jar>
+  <outfile>target\LinkUpClient.exe</outfile>
+  <errTitle>LinkUp Client</errTitle>
+  <cmdLine>client</cmdLine>
+  <chdir>.</chdir>
+  <priority>normal</priority>
+  <downloadUrl>https://adoptium.net/</downloadUrl>
+  <supportUrl></supportUrl>
+  <stayAlive>false</stayAlive>
+  <restartOnCrash>false</restartOnCrash>
+  <manifest></manifest>
+  <icon></icon>
+  <jre>
+    <path>%JAVA_HOME%;..\jbr</path>
+    <bundledJre64Bit>false</bundledJre64Bit>
+    <bundledJreAsFallback>false</bundledJreAsFallback>
+    <minVersion>17</minVersion>
+    <maxVersion></maxVersion>
+    <jdkPreference>preferJre</jdkPreference>
+    <runtimeBits>64/32</runtimeBits>
+    <initialHeapSize>128</initialHeapSize>
+    <maxHeapSize>512</maxHeapSize>
+  </jre>
+  <versionInfo>
+    <fileVersion>1.0.0.0</fileVersion>
+    <txtFileVersion>1.0.0</txtFileVersion>
+    <fileDescription>LinkUp IM Client</fileDescription>
+    <copyright>LinkUp</copyright>
+    <productVersion>1.0.0.0</productVersion>
+    <txtProductVersion>1.0.0</txtProductVersion>
+    <productName>LinkUp</productName>
+    <companyName></companyName>
+    <internalName>LinkUpClient</internalName>
+    <originalFilename>LinkUpClient.exe</originalFilename>
+    <trademarks></trademarks>
+    <language>CHINESE</language>
+  </versionInfo>
+</launch4jConfig>
