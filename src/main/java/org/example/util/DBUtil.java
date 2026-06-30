@@ -3,52 +3,59 @@ package org.example.util;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import java.io.File;
 import java.sql.Connection;
 import java.sql.SQLException;
 
 /**
- * 数据库连接工具类 - 基于 HikariCP 连接池
- * 支持高并发场景下的高效数据库连接管理
+ * 数据库连接工具类 - 基于 HikariCP 连接池 + SQLite
+ * SQLite 为单文件数据库，无需安装服务，数据存储在 data/linkup.db
  * 使用懒加载模式，避免静态初始化失败导致 JVM 崩溃
- *
- * 使用前请修改 DB_URL、DB_USER、DB_PASSWORD 为实际配置
  */
 public class DBUtil {
 
-    // ========== 数据库连接配置（请根据实际环境修改）==========
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/linkup?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=UTF-8";
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "1464483789";
+    private static final String DB_PATH = "data/linkup.db";
+    private static final String DB_URL = "jdbc:sqlite:" + DB_PATH;
 
     private static volatile HikariDataSource dataSource;
     private static final Object lock = new Object();
 
     /**
-     * 懒加载初始化连接池（首次调用时初始化，避免静态初始化失败导致 JVM 崩溃）
+     * 确保数据目录存在
+     */
+    private static void ensureDataDir() {
+        File dataDir = new File("data");
+        if (!dataDir.exists()) {
+            dataDir.mkdirs();
+            System.out.println("[DBUtil] 创建数据目录: " + dataDir.getAbsolutePath());
+        }
+    }
+
+    /**
+     * 懒加载初始化连接池（首次调用时初始化）
      */
     private static HikariDataSource getDataSource() throws SQLException {
         if (dataSource == null) {
             synchronized (lock) {
                 if (dataSource == null) {
                     try {
+                        ensureDataDir();
                         HikariConfig config = new HikariConfig();
                         config.setJdbcUrl(DB_URL);
-                        config.setUsername(DB_USER);
-                        config.setPassword(DB_PASSWORD);
-                        config.setDriverClassName("com.mysql.cj.jdbc.Driver");
+                        config.setDriverClassName("org.sqlite.JDBC");
 
-                        // 连接池配置
-                        config.setMaximumPoolSize(20);          // 最大连接数（IM 场景需要较多连接）
-                        config.setMinimumIdle(5);               // 最小空闲连接数
-                        config.setConnectionTimeout(3000);      // 获取连接超时 3 秒
-                        config.setIdleTimeout(600000);          // 空闲连接超时 10 分钟
-                        config.setMaxLifetime(1800000);         // 连接最大存活时间 30 分钟
-                        config.setLeakDetectionThreshold(10000);// 连接泄漏检测 10 秒
+                        // SQLite 不需要用户名密码，连接池配置需调整
+                        config.setMaximumPoolSize(1);           // SQLite 单文件，仅需 1 个连接
+                        config.setMinimumIdle(1);
+                        config.setConnectionTimeout(3000);
+                        config.setIdleTimeout(600000);
+                        config.setMaxLifetime(0);               // SQLite 连接无需回收
+                        config.setLeakDetectionThreshold(0);    // 关闭泄漏检测
 
                         dataSource = new HikariDataSource(config);
-                        System.out.println("[DBUtil] 数据库连接池初始化成功");
+                        System.out.println("[DBUtil] SQLite 数据库连接池初始化成功: " + DB_PATH);
                     } catch (Exception e) {
-                        System.err.println("[DBUtil] 数据库连接池初始化失败: " + e.getMessage());
+                        System.err.println("[DBUtil] SQLite 数据库连接池初始化失败: " + e.getMessage());
                         throw new SQLException("数据库连接失败: " + e.getMessage(), e);
                     }
                 }

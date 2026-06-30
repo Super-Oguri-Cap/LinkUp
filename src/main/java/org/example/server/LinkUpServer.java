@@ -39,6 +39,9 @@ public class LinkUpServer {
      */
     public void start() {
         try {
+            System.out.println("[服务端] 正在初始化数据库...");
+            org.example.util.DBInit.init();
+
             serverSocket = new ServerSocket(PORT);
             running = true;
             System.out.println("============================================");

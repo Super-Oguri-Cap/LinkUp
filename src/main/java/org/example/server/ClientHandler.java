@@ -944,7 +944,7 @@ public class ClientHandler implements Runnable {
                     msgObj.addProperty("msgId", String.valueOf(rs.getLong("id")));
                     msgObj.addProperty("sender", rs.getString("sender_name"));
                     msgObj.addProperty("content", rs.getString("content"));
-                    msgObj.addProperty("time", rs.getTimestamp("sent_at").getTime());
+                    msgObj.addProperty("time", rs.getString("sent_at"));
                     msgObj.addProperty("chatType", rs.getInt("chat_type"));
                     unreadArray.add(msgObj);
                 }
@@ -1389,7 +1389,7 @@ public class ClientHandler implements Runnable {
                     JsonObject item = new JsonObject();
                     item.addProperty("sender", rs.getString("sender_name"));
                     item.addProperty("content", rs.getString("content"));
-                    item.addProperty("time", rs.getTimestamp("sent_at").toString());
+                    item.addProperty("time", rs.getString("sent_at"));
                     results.add(item);
                 }
                 JsonObject response = new JsonObject();
@@ -1578,7 +1578,7 @@ public class ClientHandler implements Runnable {
      * 更新用户登录状态为在线
      */
     private void updateLoginStatus(String username) {
-        String sql = "UPDATE `user` SET online_status = 1, last_login_at = NOW(3) WHERE username = ?";
+        String sql = "UPDATE `user` SET online_status = 1, last_login_at = datetime('now') WHERE username = ?";
         try (Connection conn = DBUtil.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, username);
@@ -1607,7 +1607,7 @@ public class ClientHandler implements Runnable {
      */
     private void saveMessage(String sender, String receiver, int chatType, int messageType, String content, long timestamp) {
         String sql = "INSERT INTO chat_message (sender_id, receiver_id, chat_type, message_type, content, sent_at) "
-                + "SELECT u1.id, u2.id, ?, ?, ?, FROM_UNIXTIME(? / 1000.0) "
+                + "SELECT u1.id, u2.id, ?, ?, ?, datetime(? / 1000, 'unixepoch') "
                 + "FROM `user` u1, `user` u2 WHERE u1.username = ? AND u2.username = ?";
         try (Connection conn = DBUtil.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -1628,7 +1628,7 @@ public class ClientHandler implements Runnable {
      */
     private void saveGroupMessage(String sender, String content, long timestamp) {
         String sql = "INSERT INTO chat_message (sender_id, receiver_id, chat_type, message_type, content, sent_at) "
-                + "SELECT u.id, 0, ?, ?, ?, FROM_UNIXTIME(? / 1000.0) "
+                + "SELECT u.id, 0, ?, ?, ?, datetime(? / 1000, 'unixepoch') "
                 + "FROM `user` u WHERE u.username = ?";
         try (Connection conn = DBUtil.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
