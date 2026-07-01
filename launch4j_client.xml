@@ -3,7 +3,7 @@
   <dontWrapJar>false</dontWrapJar>
   <headerType>gui</headerType>
   <jar>target\LinkUp-1.0-SNAPSHOT.jar</jar>
-  <outfile>target\LinkUpClient.exe</outfile>
+  <outfile>dist\LinkUp\LinkUpClient.exe</outfile>
   <errTitle>LinkUp Client</errTitle>
   <cmdLine>client</cmdLine>
   <chdir>.</chdir>
@@ -15,7 +15,7 @@
   <manifest></manifest>
   <icon></icon>
   <jre>
-    <path>%JAVA_HOME%;..\jbr</path>
+    <path>jbr</path>
     <bundledJre64Bit>false</bundledJre64Bit>
     <bundledJreAsFallback>false</bundledJreAsFallback>
     <minVersion>17</minVersion>
@@ -37,6 +37,6 @@
     <internalName>LinkUpClient</internalName>
     <originalFilename>LinkUpClient.exe</originalFilename>
     <trademarks></trademarks>
-    <language>CHINESE</language>
+    <language>SIMPLIFIED_CHINESE</language>
   </versionInfo>
 </launch4jConfig>

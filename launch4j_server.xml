@@ -3,7 +3,7 @@
   <dontWrapJar>false</dontWrapJar>
   <headerType>console</headerType>
   <jar>target\LinkUp-1.0-SNAPSHOT.jar</jar>
-  <outfile>target\LinkUpServer.exe</outfile>
+  <outfile>dist\LinkUp\LinkUpServer.exe</outfile>
   <errTitle>LinkUp Server</errTitle>
   <cmdLine>server</cmdLine>
   <chdir>.</chdir>
@@ -15,7 +15,7 @@
   <manifest></manifest>
   <icon></icon>
   <jre>
-    <path>%JAVA_HOME%;..\jbr</path>
+    <path>jbr</path>
     <bundledJre64Bit>false</bundledJre64Bit>
     <bundledJreAsFallback>false</bundledJreAsFallback>
     <minVersion>17</minVersion>
@@ -37,6 +37,6 @@
     <internalName>LinkUpServer</internalName>
     <originalFilename>LinkUpServer.exe</originalFilename>
     <trademarks></trademarks>
-    <language>CHINESE</language>
+    <language>SIMPLIFIED_CHINESE</language>
   </versionInfo>
 </launch4jConfig>
