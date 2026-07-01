@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch4jConfig>
+  <dontWrapJar>false</dontWrapJar>          <!-- false=JAR塞进EXE里面 -->
+  <headerType>gui</headerType>               <!-- gui=无命令行窗口 / console=有 -->
+  <jar>target/你的项目.jar</jar>              <!-- 改这里 -->
+  <outfile>dist/YourApp/YourApp.exe</outfile> <!-- 输出路径 -->
+  <cmdLine>你的启动参数</cmdLine>              <!-- 传给 main(args) 的参数 -->
+  <chdir>.</chdir>
+  <jre>
+    <path>jbr</path>            <!-- 相对路径，EXE同级目录下找 -->
+    <minVersion>17</minVersion> <!-- 或 8 / 11 / 21 -->
+    <initialHeapSize>128</initialHeapSize>
+    <maxHeapSize>1024</maxHeapSize>
+  </jre>
+  <versionInfo>
+    <fileVersion>1.0.0.0</fileVersion>
+    <productName>你的产品名</productName>
+    <language>SIMPLIFIED_CHINESE</language>   <!-- 别写 CHINESE -->
+  </versionInfo>
+</launch4jConfig>
